@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XEON</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <h1 id="headline">XEON</h1>
+        <div id="mode">Wartet auf Befehl</div>
+        <div id="orb-container">
+            <div id="orb" class="idle"></div>
+        </div>
+        <div id="status">System bereit</div>
+        <div id="transcript"></div>
+        <form id="chat-form">
+            <input id="chat-input" type="text" autocomplete="off" placeholder="Schreiben Sie XEON..." />
+            <label id="voice-toggle">
+                <input id="speak-output" type="checkbox" checked />
+                <span>mit Stimme</span>
+            </label>
+            <button id="send-button" type="submit">Senden</button>
+        </form>
+    </div>
+    <script src="/static/main.js"></script>
+</body>
+</html>

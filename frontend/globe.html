@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XEON Globe</title>
+    <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+            background: #02050a;
+            color: #d7e7ff;
+            font-family: Segoe UI, Arial, sans-serif;
+            overflow: hidden;
+        }
+        #stage {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+        }
+        #globe {
+            width: min(76vmin, 760px);
+            height: min(76vmin, 760px);
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at 34% 28%, rgba(255,255,255,.26), transparent 10%),
+                radial-gradient(circle at 50% 50%, #194a72 0 28%, #0d314f 52%, #05131f 70%);
+            box-shadow: 0 0 80px rgba(44, 145, 255, .34), inset -45px -35px 80px rgba(0,0,0,.48);
+            position: relative;
+            transform: scale(1);
+            transition: transform 1.2s ease, box-shadow 1.2s ease;
+        }
+        #globe.zoom {
+            transform: scale(1.32);
+            box-shadow: 0 0 110px rgba(72, 185, 255, .55), inset -45px -35px 80px rgba(0,0,0,.42);
+        }
+        .gridline {
+            position: absolute;
+            inset: 8%;
+            border: 1px solid rgba(160,220,255,.16);
+            border-radius: 50%;
+        }
+        .gridline:nth-child(2) { transform: scaleX(.55); }
+        .gridline:nth-child(3) { transform: scaleX(.18); }
+        .gridline:nth-child(4) { transform: scaleY(.55); }
+        .marker {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #f6d36b;
+            box-shadow: 0 0 22px #f6d36b;
+            transform: translate(-50%, -50%);
+            transition: left 1.2s ease, top 1.2s ease;
+        }
+        #label {
+            position: fixed;
+            bottom: 9vh;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: clamp(28px, 5vw, 64px);
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+        #sub {
+            position: fixed;
+            bottom: 5vh;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: #86a7c7;
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div id="stage">
+        <div id="globe">
+            <div class="gridline"></div>
+            <div class="gridline"></div>
+            <div class="gridline"></div>
+            <div class="gridline"></div>
+            <div id="marker" class="marker"></div>
+        </div>
+    </div>
+    <div id="label">XEON Global Briefing</div>
+    <div id="sub">Handel, Geopolitik, Lieferketten</div>
+    <script>
+        const points = {
+            "usa": ["USA", 25, 43],
+            "china": ["China", 72, 45],
+            "turkey": ["Tuerkei", 55, 48],
+            "germany": ["Deutschland", 50, 38],
+            "russia": ["Russland", 61, 31],
+            "ukraine": ["Ukraine", 56, 40],
+            "israel": ["Israel", 56, 53],
+            "iran": ["Iran", 60, 52],
+            "india": ["Indien", 66, 59],
+            "brazil": ["Brasilien", 36, 69],
+            "saudi-arabia": ["Saudi-Arabien", 58, 58],
+            "egypt": ["Aegypten", 54, 55],
+            "france": ["Frankreich", 48, 41],
+            "united-kingdom": ["Vereinigtes Koenigreich", 46, 36]
+        };
+        const params = new URLSearchParams(location.search);
+        const sequence = (params.get("countries") || "germany,turkey,china,usa")
+            .split(",").map(x => x.trim()).filter(Boolean);
+        const globe = document.getElementById("globe");
+        const marker = document.getElementById("marker");
+        const label = document.getElementById("label");
+        let i = 0;
+        function step() {
+            const key = sequence[i % sequence.length];
+            const p = points[key] || points.germany;
+            globe.classList.remove("zoom");
+            setTimeout(() => {
+                marker.style.left = p[1] + "%";
+                marker.style.top = p[2] + "%";
+                label.textContent = p[0];
+                globe.classList.add("zoom");
+            }, 500);
+            i++;
+        }
+        step();
+        setInterval(step, 3600);
+    </script>
+</body>
+</html>
