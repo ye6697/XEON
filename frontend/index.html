@@ -1,13 +1,23 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>XEON</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=focus-guard-1">
 </head>
 <body>
+    <aside id="usage-panel" aria-label="OpenAI Monatsverbrauch">
+        <div class="usage-label">OpenAI Monat</div>
+        <div id="usage-total">lade...</div>
+        <div id="usage-models">Modelle: lade...</div>
+    </aside>
     <div id="app">
+        <div id="window-controls" aria-label="Fenstersteuerung">
+            <button id="window-minimize" type="button" title="Minimieren">_</button>
+            <button id="window-tray" type="button" title="In den Tray">□</button>
+            <button id="window-close" type="button" title="Schliessen">×</button>
+        </div>
         <h1 id="headline">XEON</h1>
         <div id="mode">Wartet auf Befehl</div>
         <div id="orb-container">
@@ -15,6 +25,22 @@
         </div>
         <div id="status">System bereit</div>
         <div id="transcript"></div>
+        <section id="accountability-panel" aria-label="Aufgaben">
+            <div class="accountability-column">
+                <div class="accountability-title">AUFGABEN</div>
+                <div id="todo-list" class="accountability-list">Lade Aufgaben...</div>
+            </div>
+        </section>
+        <div id="attachment-panel" aria-label="Lokale Dateien und Ordner">
+            <div id="attachment-actions">
+                <button id="attach-files-button" type="button" title="Lokale Dateien einbinden">Dateien</button>
+                <button id="attach-folder-button" type="button" title="Lokalen Ordner einbinden">Ordner</button>
+                <button id="clear-attachments-button" type="button" title="Lokale Pfade entfernen">Leeren</button>
+            </div>
+            <div id="attachment-list">Keine lokalen Dateien/Ordner</div>
+            <input id="file-input" type="file" multiple hidden />
+            <input id="folder-input" type="file" multiple webkitdirectory directory hidden />
+        </div>
         <form id="chat-form">
             <input id="chat-input" type="text" autocomplete="off" placeholder="Schreiben Sie XEON..." />
             <label id="voice-toggle">
@@ -24,6 +50,40 @@
             <button id="send-button" type="submit">Senden</button>
         </form>
     </div>
-    <script src="/static/main.js"></script>
+    <section id="news-hud" hidden>
+        <div id="hud-grid"></div>
+        <div id="hud-core">
+            <div id="hud-title">GLOBALER SCAN</div>
+            <div id="hud-subtitle">Welthandel, Lieferketten und geopolitische Signale</div>
+            <div id="hud-ring"></div>
+            <div id="hud-country-list"></div>
+        </div>
+    </section>
+    <section id="world-monitor-view" hidden>
+        <div id="local-world-map">
+            <div id="map-stage" aria-label="Digitale Weltkarte">
+                <div id="tile-map"></div>
+                <div id="map-focus"></div>
+            </div>
+        </div>
+        <div id="world-monitor-banner">XEON Fokus</div>
+    </section>
+    <div id="todo-toast" hidden>
+        <div id="todo-toast-title">XEON NACHFASSEN</div>
+        <div id="todo-toast-text"></div>
+    </div>
+    <section id="focus-guard-overlay" hidden>
+        <div id="focus-guard-grid"></div>
+        <div id="focus-guard-panel">
+            <div id="focus-guard-kicker">FOCUS GUARD</div>
+            <div id="focus-guard-title">Intervention aktiv</div>
+            <div id="focus-guard-task"></div>
+            <div id="focus-guard-bars">
+                <span></span><span></span><span></span><span></span>
+            </div>
+            <div id="focus-guard-subtitle">Spielmodus gesperrt, bis die Aufgabe nachweisbar erledigt ist.</div>
+        </div>
+    </section>
+    <script src="/static/main.js?v=focus-guard-1"></script>
 </body>
 </html>

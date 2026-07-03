@@ -59,6 +59,36 @@ class Base44Tools:
             response.raise_for_status()
             return {"entity": entity, "operation": "get", "data": response.json()}
 
+    async def create_entity(self, entity: str, data: dict[str, Any]) -> dict[str, Any]:
+        entity = self._validate_entity(entity)
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{self.base_url}/entities/{entity}",
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json=data,
+            )
+            response.raise_for_status()
+            return {"entity": entity, "operation": "create", "data": response.json()}
+
+    async def update_entity(self, entity: str, record_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        entity = self._validate_entity(entity)
+        if not record_id:
+            raise ValueError("record_id fehlt.")
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.put(
+                f"{self.base_url}/entities/{entity}/{record_id}",
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json=data,
+            )
+            if response.status_code == 405:
+                response = await client.patch(
+                    f"{self.base_url}/entities/{entity}/{record_id}",
+                    headers={**self._headers(), "Content-Type": "application/json"},
+                    json=data,
+                )
+            response.raise_for_status()
+            return {"entity": entity, "operation": "update", "data": response.json()}
+
     async def health_snapshot(self) -> dict[str, Any]:
         focus_entities = ["Order", "Message", "Lead", "User", "StatusUpdate", "SystemHealthReport"]
         results = {}

@@ -81,14 +81,15 @@ def _parse_number(value: str) -> int | None:
 def _parse_clock(text: str) -> tuple[int, int, str] | None:
     match = re.search(
         r"\b(?:um|gegen)\s*(\d{1,2})(?:(?:[:.])(\d{2}))?\s*(?:uhr)?\b"
-        r"|\b(\d{1,2})\s*uhr(?:\s*(\d{1,2}))?\b",
+        r"|\b(\d{1,2})\s*uhr(?:\s*(\d{1,2}))?\b"
+        r"|\b(\d{1,2})[:.](\d{2})\b",
         text,
         re.IGNORECASE,
     )
     if not match:
         return None
-    hour = int(match.group(1) or match.group(3))
-    minute = int(match.group(2) or match.group(4) or 0)
+    hour = int(match.group(1) or match.group(3) or match.group(5))
+    minute = int(match.group(2) or match.group(4) or match.group(6) or 0)
     if 0 <= hour <= 23 and 0 <= minute <= 59:
         return hour, minute, match.group(0)
     return None
@@ -206,6 +207,7 @@ def _parse_due(text: str, now: datetime) -> tuple[datetime | None, str]:
 
 def _clean_task(text: str, date_phrase: str) -> str:
     task = text
+    task = re.sub(r"\b(?:xeon\s+desktop|desktop\s+xeon)\s+soll\s+mich\b", " ", task, flags=re.IGNORECASE)
     task = re.sub(r"\b(?:oeffne|öffne)\s+dabei\s+(?:dann\s+)?(?:auch\s+)?(.+)$", " ", task, flags=re.IGNORECASE)
     if date_phrase:
         task = re.sub(re.escape(date_phrase), " ", task, flags=re.IGNORECASE)
@@ -215,13 +217,20 @@ def _clean_task(text: str, date_phrase: str) -> str:
     task = re.sub(r"\b\d{1,2}\.\d{1,2}(?:\.\d{2,4})?\.?\b", " ", task)
     task = re.sub(r"\b(?:um|gegen)\s*\d{1,2}(?:(?:[:.])\d{2})?\s*(?:uhr)?\b", " ", task, flags=re.IGNORECASE)
     task = re.sub(r"\b\d{1,2}\s*uhr(?:\s*\d{1,2})?\b", " ", task, flags=re.IGNORECASE)
+    task = re.sub(r"\b\d{1,2}[:.]\d{2}\b", " ", task)
     patterns = [
         r"\berinnere\s+mich\b",
         r"\berinner\s+mich\b",
+        r"\berrinnere\s+mich\b",
+        r"\berrinner\s+mich\b",
+        r"\berrinnern\b",
+        r"\berinnern\b",
         r"\berinnerung\b",
         r"\bmerk\s+dir\b",
         r"\bmerke\s+dir\b",
         r"\bsollst\s+du\s+mich\s+erinnern\b",
+        r"\bsoll\s+mich\b",
+        r"\bdran\b",
         r"\bdaran\b",
         r"\ban\b",
         r"\bam\b",
@@ -238,6 +247,28 @@ def _clean_task(text: str, date_phrase: str) -> str:
     return task or "Ihre Erinnerung"
 
 
+def normalize(text: str) -> str:
+    return (
+        str(text or "").lower()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .replace("Ã¤", "ae")
+        .replace("Ã¶", "oe")
+        .replace("Ã¼", "ue")
+        .replace("ÃŸ", "ss")
+    )
+
+
+def fingerprint(text: str) -> str:
+    normalized = normalize(text)
+    normalized = re.sub(r"\b(?:sir|xeon|bitte|erinner(?:e|n|ung)?|todo|aufgabe|task|ich|mich|mir|dass|das|an|am|um|uhr|heute|morgen|uebermorgen|machen|muss|soll|sollst|du|noch)\b", " ", normalized)
+    normalized = re.sub(r"\b\d{1,2}(?::|\.)?\d{0,2}\b", " ", normalized)
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
 def _extract_action(text: str) -> dict | None:
     match = re.search(r"\b(?:oeffne|öffne)\s+dabei\s+(?:dann\s+)?(?:auch\s+)?(.+)$", text, re.IGNORECASE)
     if not match:
@@ -249,12 +280,26 @@ def _extract_action(text: str) -> dict | None:
 
 
 def is_reminder_request(text: str) -> bool:
-    t = text.lower()
-    return any(token in t for token in ["erinnere", "erinner mich", "erinnerung", "merk dir", "merke dir"])
+    t = (
+        text.lower()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+    )
+    return bool(
+        any(token in t for token in ["erinnere", "errinere", "erinner mich", "errinner mich", "erinnerung", "merk dir", "merke dir"])
+        or re.search(r"\berr?in+er(?:e|n|ung)?\b", t)
+        or re.search(r"\bsoll\s+mich\b.*\berr?in+er", t)
+    )
 
 
-def create_reminder(raw_text: str) -> dict:
-    now = now_local()
+def create_reminder(raw_text: str, reference_now: datetime | None = None) -> dict:
+    now = reference_now or now_local()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=TIMEZONE)
+    else:
+        now = now.astimezone(TIMEZONE)
     due, date_phrase = _parse_due(raw_text, now)
     if not due:
         return {
@@ -268,6 +313,12 @@ def create_reminder(raw_text: str) -> dict:
         }
 
     task = _clean_task(raw_text, date_phrase)
+    urgent = bool(re.search(r"\b(dringend|urgent|sofort|notfall|prioritaet|priorität)\b", normalize(raw_text)))
+    fp = fingerprint(task or raw_text)
+    for existing in load_reminders():
+        if existing.get("status", "open") == "open" and fingerprint(existing.get("text") or existing.get("source") or "") == fp and fp:
+            existing["duplicate"] = True
+            return {"ok": True, "reminder": existing, "duplicate": True}
     reminder = {
         "id": uuid.uuid4().hex[:12],
         "text": task,
@@ -276,6 +327,10 @@ def create_reminder(raw_text: str) -> dict:
         "due_at": due.isoformat(),
         "created_at": now.isoformat(),
         "notified_at": None,
+        "status": "open",
+        "fingerprint": fp,
+        "priority": "urgent" if urgent else "normal",
+        "urgent": urgent,
     }
     reminders = load_reminders()
     reminders.append(reminder)
@@ -287,22 +342,26 @@ def create_reminder(raw_text: str) -> dict:
 def pending_reminders(limit: int = 5) -> list[dict]:
     reminders = [
         item for item in load_reminders()
-        if not item.get("notified_at")
+        if item.get("status", "open") == "open"
     ]
     reminders.sort(key=lambda item: item.get("due_at", ""))
-    return reminders[:limit]
+    return [with_badge(item) for item in reminders[:limit]]
 
 
 def due_reminders() -> list[dict]:
     now = now_local()
     due = []
     for item in load_reminders():
-        if item.get("notified_at"):
+        if item.get("notified_at") or item.get("status", "open") != "open":
             continue
         try:
             due_at = datetime.fromisoformat(item["due_at"])
         except Exception:
             continue
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=TIMEZONE)
+        else:
+            due_at = due_at.astimezone(TIMEZONE)
         if due_at <= now:
             due.append(item)
     return due
@@ -318,6 +377,63 @@ def mark_notified(reminder_id: str) -> None:
     save_reminders(reminders)
 
 
+def mark_done(reminder_id: str) -> dict | None:
+    reminders = load_reminders()
+    stamped = now_local().isoformat()
+    updated = None
+    for item in reminders:
+        if item.get("id") == reminder_id:
+            item["status"] = "done"
+            item["completed_at"] = stamped
+            updated = item
+            break
+    save_reminders(reminders)
+    return updated
+
+
+def delete_by_fingerprint(fp: str) -> int:
+    if not fp:
+        return 0
+    reminders = load_reminders()
+    kept = []
+    removed = 0
+    for item in reminders:
+        item_fp = item.get("fingerprint") or fingerprint(item.get("text") or item.get("source") or "")
+        if item.get("status", "open") == "open" and item_fp == fp:
+            removed += 1
+            continue
+        kept.append(item)
+    if removed:
+        save_reminders(kept)
+    return removed
+
+
+def with_badge(item: dict) -> dict:
+    copy = dict(item)
+    try:
+        due_at = datetime.fromisoformat(copy["due_at"])
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=TIMEZONE)
+        else:
+            due_at = due_at.astimezone(TIMEZONE)
+        now = now_local()
+        if copy.get("notified_at"):
+            copy["badge"] = "aufgefordert"
+        elif due_at <= now:
+            copy["badge"] = "ueberfaellig"
+        elif due_at.date() == now.date():
+            copy["badge"] = "heute faellig"
+        else:
+            copy["badge"] = "geplant"
+    except Exception:
+        copy["badge"] = "offen"
+    return copy
+
+
 def format_due(due_at: str) -> str:
-    due = datetime.fromisoformat(due_at).astimezone(TIMEZONE)
+    due = datetime.fromisoformat(due_at)
+    if due.tzinfo is None:
+        due = due.replace(tzinfo=TIMEZONE)
+    else:
+        due = due.astimezone(TIMEZONE)
     return due.strftime("%d.%m.%Y um %H:%M Uhr")

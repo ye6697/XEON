@@ -1,7 +1,7 @@
-# XEON - Install Windows logon task for persistent double-clap listener
+# XEON - Install Windows logon task for persistent local helpers
 
 $TaskName = "XEON Clap Listener"
-$StartScript = Resolve-Path (Join-Path $PSScriptRoot "start-clap-listener.ps1")
+$StartScript = Resolve-Path (Join-Path $PSScriptRoot "start-watchdog.ps1")
 $ActivityScript = Resolve-Path (Join-Path $PSScriptRoot "start-activity-monitor.ps1")
 $ReminderScript = Resolve-Path (Join-Path $PSScriptRoot "start-reminder-monitor.ps1")
 $Action = New-ScheduledTaskAction `

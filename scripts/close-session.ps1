@@ -1,12 +1,24 @@
 # XEON - Close Session
 
-$portProcess = Get-NetTCPConnection -LocalPort 8340 -State Listen -ErrorAction SilentlyContinue |
-    Select-Object -First 1 -ExpandProperty OwningProcess
+Get-Process -Name "XEON" -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
 
-if ($portProcess) {
-    Stop-Process -Id $portProcess -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 250
+
+$remaining = Get-Process -Name "XEON" -ErrorAction SilentlyContinue
+if ($remaining) {
+    & taskkill.exe /IM XEON.exe /T /F 2>$null | Out-Null
 }
 
-Get-Process -Name "chrome" -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowTitle -like "*XEON*" -or $_.MainWindowTitle -like "*Globe*" } |
-    Stop-Process -Force -ErrorAction SilentlyContinue
+$WorkspacePath = Resolve-Path (Join-Path $PSScriptRoot "..")
+$ChromeProfile = Join-Path $WorkspacePath "chrome-xeon-profile"
+
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        ($_.CommandLine -like "*xeon_launcher.py*") -or
+        ($_.CommandLine -like "*$ChromeProfile*") -or
+        ($_.CommandLine -like "*localhost:8340*" -and $_.Name -match "chrome|msedge")
+    } |
+    ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
