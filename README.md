@@ -1,41 +1,51 @@
 # XEON - Personal AI Voice Assistant
 
-XEON ist ein lokaler Sprachassistent fuer Windows: Chrome nimmt Sprache auf, ein FastAPI-Server verarbeitet die Anfrage, ElevenLabs spricht die Antwort, Playwright steuert den Browser, und ein Doppelklatschen kann die komplette Session starten.
+XEON ist ein lokaler Sprachassistent fuer Windows: Chrome nimmt Sprache auf, ein FastAPI-Server verarbeitet die Anfrage, ElevenLabs oder Edge-TTS spricht die Antwort, Playwright steuert den Browser, und ein Doppelklatschen kann die komplette Session starten.
 
-Diese Version nutzt standardmaessig deinen lokalen Codex-Login ueber `codex.cmd exec`. Dafuer brauchst du keinen OpenAI-API-Key, solange Codex mit deinem ChatGPT/Codex-Account eingeloggt ist.
+Diese Version ist auf direkten OpenAI-API-Betrieb mit `gpt-5.4-mini` optimiert. Das Ziel ist nicht, ein groesseres Modell zu nutzen, sondern aus Mini durch weniger Prompt-Ballast, kompakteren Verlauf und bessere Tool-Fuehrung mehr herauszuholen.
 
 ## Features
 
 - Doppelklatschen startet dein Setup
 - Sprachgespraeche im Browser
-- Codex CLI als KI-Provider ohne OpenAI-API-Key
-- ElevenLabs Text-to-Speech
+- OpenAI API als KI-Provider mit `gpt-5.4-mini`
+- ElevenLabs oder Edge-TTS fuer Sprachausgabe
 - Browser-Suche und URL-Oeffnen via Playwright
-- Screenshot-Beschreibung via Codex CLI Bild-Input
-- Wetter und optionale Obsidian-Aufgaben beim Start
+- Screenshot-/Desktop-Agent fuer sichtbare UI-Schritte
+- Wetter, Aufgaben, Kalender, Base44/MySupplieX und optionale Mobile-Sync-Funktionen
 
 ## Quick Start
 
 ```powershell
-codex.cmd login status
 pip install -r requirements.txt
 playwright install chromium
 Copy-Item config.example.json config.json
 ```
 
-In `config.json` bleiben diese Werte fuer den Codex-Modus:
+OpenAI API-Key als Windows-User-Variable setzen:
+
+```powershell
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-...", "User")
+```
+
+Danach Terminal, VS Code und XEON neu starten.
+
+In `config.json` bleiben diese Werte fuer den Mini-only-Modus:
 
 ```json
 {
-  "ai_provider": "codex_cli",
-  "openai_api_key": "",
-  "codex_command": "codex.cmd",
-  "codex_model": "gpt-5.5",
-  "codex_timeout_seconds": 90
+  "ai_provider": "openai",
+  "openai_model_fast": "gpt-5.4-mini",
+  "openai_model_smart": "gpt-5.4-mini",
+  "openai_model": "gpt-5.4-mini",
+  "openai_force_fast_only": true,
+  "openai_default_to_smart": true,
+  "conversation_prompt_messages": 24,
+  "conversation_memory_max_messages": 80
 }
 ```
 
-Du musst trotzdem `elevenlabs_api_key`, `elevenlabs_voice_id`, `user_name`, `city` und `workspace_path` passend setzen.
+Du musst trotzdem `elevenlabs_api_key`, `elevenlabs_voice_id`, `user_name`, `city` und `workspace_path` passend setzen, sofern du ElevenLabs nutzt.
 
 Server starten:
 
@@ -55,18 +65,31 @@ Dann Chrome oeffnen:
 http://localhost:8340
 ```
 
+## Mini-Optimierung
+
+Die Mini-only-Strategie ist in `docs/GPT54_MINI_OPTIMIZATION.md` dokumentiert.
+
+Wichtig:
+
+- XEON soll weiterhin ausschliesslich `gpt-5.4-mini` nutzen.
+- Der Kontext wurde in den Defaults reduziert, damit Mini nicht bei jeder Anfrage alten Ballast mitschleppt.
+- `openai_default_to_smart` bleibt trotzdem aktiv, aber `smart` zeigt ebenfalls auf `gpt-5.4-mini`.
+- Fuer schwere Aufgaben sollte `server.py` dynamisches Reasoning nutzen: einfache Aufgaben `low`, Analyse/Repo/Desktop/Shell `medium` bis `high`.
+
 ## Hinweise
 
-- `codex_cli` ist deutlich langsamer als direkte OpenAI API-Aufrufe, weil pro Antwort ein Codex-Exec-Lauf gestartet wird.
-- Codex muss eingeloggt sein: `codex.cmd login status`.
-- Voice braucht weiterhin ElevenLabs-Zugangsdaten.
+- Direkte OpenAI API-Aufrufe sind fuer Voice deutlich schneller als Codex-CLI-Exec-Laeufe.
+- Voice braucht ElevenLabs-Zugangsdaten, ausser du nutzt Edge-TTS.
+- Fuer Kalender brauchst du optional Google OAuth-Dateien.
+- Fuer Base44/MySupplieX brauchst du Base44-URL, API-Key und freigegebene Entities.
 
 ## Fehlerbehebung
 
 | Problem | Loesung |
 |---|---|
-| Codex CLI fehlgeschlagen | `codex.cmd login status` pruefen |
-| XEON antwortet langsam | Bei `ai_provider: codex_cli` normal |
-| XEON spricht nicht | ElevenLabs-Key/Voice-ID pruefen und einmal in Chrome klicken |
+| OpenAI API fehlt | `OPENAI_API_KEY` als Windows-User-Env setzen und XEON neu starten |
+| XEON wirkt stumpf | Pruefen, ob `conversation_prompt_messages` niedrig genug ist und Mini nicht mit altem Kontext ueberladen wird |
+| XEON antwortet zu knapp | In `server.py` Reasoning/Verbosity fuer schwere Aufgaben dynamisch auf `medium`/`high` setzen |
+| XEON spricht nicht | ElevenLabs-Key/Voice-ID pruefen oder Edge-TTS aktivieren und einmal in Chrome klicken |
 | Browser-Automation scheitert | `playwright install chromium` ausfuehren |
 | Klatschen wird nicht erkannt | `THRESHOLD` in `scripts\clap-trigger.py` senken |
