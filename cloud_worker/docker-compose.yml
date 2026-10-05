@@ -1,0 +1,10 @@
+services:
+  xeon-work:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/var/lib/xeon-work
