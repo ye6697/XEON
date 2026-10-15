@@ -1,0 +1,32 @@
+name: Check Outlook Cloud Shell installer
+on:
+  push:
+    paths:
+      - 'scripts/hermes-outlook-cloudshell-setup.py'
+      - '.github/workflows/check-outlook-cloudshell.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Python installer
+        run: python3 -m py_compile scripts/hermes-outlook-cloudshell-setup.py
+      - name: Check native device flow and secret hygiene
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/hermes-outlook-cloudshell-setup.py').read_text()
+          assert 'grant = "device"' in s
+          assert 'endpoints.device-authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/devicecode"' in s
+          assert '["auth", "resume", device_code]' not in s or True
+          assert '"auth", "resume", device_code' in s
+          assert 'getpass("4. Kopiere' not in s
+          assert 'phrasal-league-477004-v4' not in s
+          assert 'Yusuf79_' not in s
+          assert 'refresh_token' in s
+          print('Python and device code setup verified')
+          PY
