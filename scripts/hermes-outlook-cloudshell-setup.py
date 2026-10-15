@@ -134,53 +134,65 @@ def authorize(tmp: Path):
     config = tmp / "ortie.toml"
     # The read/write commands belong to upstream Ortie; raw JSON never appears
     # on stdout or in a shell variable and is deleted at the end of this process.
+    # Official Microsoft device authorization grant, handled entirely by
+    # the unchanged upstream Ortie CLI. No Safari localhost callback, no
+    # long authorize URL, no reimplementation of token exchange.
     cfg = """[accounts.outlook]
 default = true
 client-id = "{client}"
-grant = "authorization-code"
-pkce = "s256"
+grant = "device"
 auto-refresh = true
-endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.device-authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/devicecode"
 endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-endpoints.redirection = "https://localhost"
 scopes = ["https://outlook.office.com/IMAP.AccessAsUser.All", "https://outlook.office.com/SMTP.Send", "offline_access"]
 storage.read.command = ["cat", "{tokenfile}"]
 storage.write.command = "umask 077; cat > '{tokenfile}'"
 """.format(client=CLIENT, tokenfile=token_path)
     config.write_text(cfg, encoding="utf-8")
-    if tomllib.loads(cfg)["accounts"]["outlook"]["client-id"] != CLIENT:
+    if (tomllib.loads(cfg)["accounts"]["outlook"]["client-id"] != CLIENT or
+            tomllib.loads(cfg)["accounts"]["outlook"]["grant"] != "device"):
         raise SafeError("OAuth-Konfiguration ungültig.")
     base = [str(binary), "--json", "-c", str(config), "-a", "outlook"]
     start = subprocess.run([*base, "auth", "get"], capture_output=True, timeout=40)
     if start.returncode:
-        raise SafeError("Microsoft-Autorisierung konnte nicht gestartet werden.")
+        raise SafeError(
+            "Microsoft verweigert die Gerätecode-Anmeldung für diese Anwendung "
+            "oder die Berechtigungen. Kein Outlook-Token wurde übertragen.")
     try:
-        data = json.loads(start.stdout)
-        url = recursive_find(data, "authorization_uri")
-        state = recursive_find(data, "state")
-        verifier = recursive_find(data, "pkce_code_verifier")
-        if not all(isinstance(x, str) and x for x in (url, state, verifier)):
-            raise ValueError
+        result = json.loads(start.stdout)
+        code = recursive_find(result, "user_code")
+        device_code = recursive_find(result, "device_code")
+        verification_url = recursive_find(result, "verification_uri")
+        lifetime = recursive_find(result, "expires_in")
+        if not all(isinstance(x, str) and x for x in (code, device_code, verification_url)):
+            raise ValueError("missing device code")
+        uri = urllib.parse.urlparse(verification_url)
+        if uri.scheme != "https" or uri.hostname not in (
+                "microsoft.com", "www.microsoft.com", "microsoftonline.com",
+                "www.microsoftonline.com"):
+            raise ValueError("unexpected Microsoft verification URL")
     except (ValueError, TypeError):
-        raise SafeError("Ortie lieferte kein gültiges OAuth-Handoff.") from None
-    if urllib.parse.urlparse(url).hostname != "login.microsoftonline.com":
-        raise SafeError("Unbekannte Microsoft-Anmeldeseite.")
-    print("\n1. Öffne diese Microsoft-Anmeldeseite auf deinem iPhone:\n" + url)
-    print("\n2. Melde dich mit " + ADDRESS + " an und bestätige den Zugriff.")
-    print("3. Safari kann danach 'localhost nicht erreichbar' anzeigen; das ist hier normal.")
-    redirected = getpass("4. Kopiere die vollständige URL aus der Safari-Adresszeile HIER in Cloud Shell (Eingabe verborgen): ").strip()
-    u = urllib.parse.urlparse(redirected)
-    q = urllib.parse.parse_qs(u.query)
-    if (u.scheme != "https" or u.hostname != "localhost" or
-            len(redirected) > 8192 or q.get("state") != [state] or len(q.get("code", [])) != 1):
-        raise SafeError("Ungültiger oder abgelaufener Microsoft-Rücksprung. Bitte neu starten.")
-    # Avoid printing subprocess command/args, which contain the one-time OAuth code.
-    end = subprocess.run([*base, "auth", "resume", "--state=" + state,
-                          "--pkce=" + verifier, redirected],
-                         capture_output=True, timeout=45)
-    del redirected
+        raise SafeError("Microsoft hat keinen gültigen Gerätecode geliefert.") from None
+
+    print("\nMicrosoft-Anmeldung – ohne lange Links oder Safari-Downloads:")
+    print("1. Öffne auf deinem iPhone: " + verification_url)
+    print("2. Gib diesen kurzen Code ein: " + code)
+    print("3. Melde dich mit " + ADDRESS + " an und bestätige den Zugriff.")
+    print("4. Lasse diese Cloud Shell geöffnet. Sie wartet auf die Microsoft-Freigabe.")
+    try:
+        wait = int(lifetime) if isinstance(lifetime, (int, float)) else 900
+    except (ValueError, OverflowError):
+        wait = 900
+    wait = min(max(wait, 60), 900) + 30
+    try:
+        end = subprocess.run([*base, "auth", "resume", device_code],
+                             capture_output=True, timeout=wait)
+    except subprocess.TimeoutExpired:
+        raise SafeError("Der Microsoft-Gerätecode ist abgelaufen. Bitte erneut starten.") from None
     if end.returncode:
-        raise SafeError("Microsoft hat den OAuth-Austausch abgelehnt. Es wurde nichts übertragen.")
+        raise SafeError("Microsoft hat die Anmeldung nicht bestätigt "
+                        "oder die Gerätecode-Autorisierung ist abgelaufen.")
+    del code, device_code
     if not token_path.is_file():
         raise SafeError("Ortie hat keinen Token gespeichert.")
     try:
