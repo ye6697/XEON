@@ -160,20 +160,27 @@ storage.write.command = "umask 077; cat > '{tokenfile}'"
             "oder die Berechtigungen. Kein Outlook-Token wurde übertragen.")
     try:
         result = json.loads(start.stdout)
-        code = recursive_find(result, "user_code")
-        device_code = recursive_find(result, "device_code")
-        verification_url = recursive_find(result, "verification_uri")
-        lifetime = recursive_find(result, "expires_in")
-        if not all(isinstance(x, str) and x for x in (code, device_code, verification_url)):
-            raise ValueError("missing device code")
-        uri = urllib.parse.urlparse(verification_url)
-        if uri.scheme != "https" or uri.hostname not in (
-                "microsoft.com", "www.microsoft.com", "microsoftonline.com",
-                "www.microsoftonline.com"):
-            raise ValueError("unexpected Microsoft verification URL")
     except (ValueError, TypeError):
-        raise SafeError("Microsoft hat keinen gültigen Gerätecode geliefert.") from None
-
+        raise SafeError(
+            "Ortie antwortet nicht im erwarteten JSON-Format. "
+            "Bitte die Ortie-Version prüfen (ohne Ausgabe von Tokens).") from None
+    code = recursive_find(result, "user_code")
+    device_code = recursive_find(result, "device_code")
+    lifetime = recursive_find(result, "expires_in")
+    if not isinstance(code, str) or not code.strip():
+        raise SafeError(
+            "Ortie hat keinen Benutzer-Anmeldecode ausgegeben. "
+            "Die Microsoft-Autorisierung wurde noch nicht bestätigt.")
+    if not isinstance(device_code, str) or not device_code.strip():
+        raise SafeError(
+            "Ortie hat keinen Geräte-Token ausgegeben. "
+            "Die Microsoft-Autorisierung wurde noch nicht bestätigt.")
+    if len(code) > 80 or len(device_code) > 4096:
+        raise SafeError("Die Microsoft-Gerätecode-Antwort hat eine ungültige Länge.")
+    # Always show the known Microsoft device login page. Do not reject a
+    # legitimate authorization just because the provider returns a different
+    # alias for verification_uri, and never open a URL from untrusted output.
+    verification_url = "https://microsoft.com/devicelogin"
     print("\nMicrosoft-Anmeldung – ohne lange Links oder Safari-Downloads:")
     print("1. Öffne auf deinem iPhone: " + verification_url)
     print("2. Gib diesen kurzen Code ein: " + code)
