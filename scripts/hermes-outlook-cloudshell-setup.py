@@ -32,12 +32,34 @@ class SafeError(Exception):
 
 
 def gcloud(*args):
+    # Never print secret values or full diagnostic output. Classify errors only
+    # and tell the owner WHICH Google Cloud permission boundary failed.
+    stage = "Cloud Run (XEON-Dienst lesen)" if args[:2] == ("run", "services") else (
+        "Secret Manager (Hermes-Zugriffsschlüssel lesen)")
     try:
-        res = subprocess.run(["gcloud", *args, "--project", PROJECT], check=True,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
-        return res.stdout.decode("utf-8").strip()
-    except (FileNotFoundError, subprocess.SubprocessError):
-        raise SafeError("GCP-Zugriff nicht möglich. Cloud-Shell-Projekt und Berechtigungen prüfen.") from None
+        res = subprocess.run(["gcloud", *args, "--project", PROJECT],
+                             check=False, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, timeout=90)
+    except FileNotFoundError:
+        raise SafeError("Google Cloud CLI ist hier nicht installiert.") from None
+    except subprocess.TimeoutExpired:
+        raise SafeError(stage + ": Google Cloud antwortet nicht rechtzeitig.") from None
+    if res.returncode != 0:
+        error = res.stderr.decode("utf-8", "replace").lower()
+        if any(x in error for x in ("permission_denied", "permission denied",
+                                      "does not have permission", "403", "forbidden")):
+            kind = "Zugriff verweigert (IAM-Berechtigung fehlt)"
+        elif any(x in error for x in ("unauthenticated", "please run: gcloud auth login",
+                                       "no active account", "invalid_grant", "login required")):
+            kind = "Google-Cloud-Anmeldung fehlt oder ist abgelaufen"
+        elif any(x in error for x in ("not_found", "not found", "404")):
+            kind = "Dienst oder Secret-Version nicht gefunden"
+        elif "api" in error and ("disabled" in error or "not enabled" in error):
+            kind = "Google-Cloud-API nicht aktiviert"
+        else:
+            kind = "Cloud-CLI-Fehler (Exitcode " + str(res.returncode) + ")"
+        raise SafeError(stage + ": " + kind + ". Bitte die genaue Stufe mitteilen; keine Secrets oder Tokens posten.") from None
+    return res.stdout.decode("utf-8").strip()
 
 
 def runtime():
